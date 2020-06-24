@@ -1,40 +1,26 @@
-gatk=/software/biosoft/gatk-4.0.3.0/gatk
-gvcf=/work2019/meat/04.gatk/gvcf
-outdir=`pwd`
-ref=/work2019/ref/pigRef
+ref=/genomes/goat/ref
+vcftools=/Software/Soft_ALL/vcftools-0.1.13/bin/vcftools
+gatk=/Software/Soft_ALL/gatk-4.1.1.0/gatk
+out=`pwd`
 
-for i in `seq 1 18` X Y
+for ind in `ls -d $bam/*/*bam`
 do
-	mkdir -p $outdir/chr$i
-	
-	for j in `ls $gvcf/*/*/chr$i.g.vcf.gz`
-	do
-		echo "$j" >> $outdir/chr$i/chr${i}.gvcf.list
-	done
-	
-	echo "date
-		$gatk --java-options \"-Xmx20G -Djava.io.tmpdir=$outdir/chr$i/tmp1\" CombineGVCFs -R $ref/chr${i}.fa -V $outdir/chr$i/chr${i}.gvcf.list -O $outdir/chr$i/chr${i}.combine.vcf.gz
-		date
-		echo \"gatk CombineGVCFs Done\"
-		qstat -j \$JOB_ID|grep usage ">$outdir/chr$i/chr${i}.combine.sh
+    sp=`echo $ind|awk -F / '{print $(NF-1)}'`
+    mkdir -p $out/$sp
+    for i in `seq 1 29`
+    do	
+		mkdir -p $out/$sp/chr$i
+		for  j in `seq 1 4`
+		do
+	    	if [ -e $ref/chr${i}_${j}.intervals ];then
+			echo "date
+$gatk --java-options -Xmx4G HaplotypeCaller -R $ref/goat.fa -I $ind -L $ref/chr${i}_${j}.intervals -O $out/$sp/chr$i/chr${i}_${j}.g.vcf.gz --emit-ref-confidence GVCF
+				date
+				qstat -j \$JOB_ID|grep usage ">$out/$sp/chr$i/${sp}.chr${i}_${j}.sh
 
-	echo "date
-		$gatk --java-options \"-Xmx20G -Djava.io.tmpdir=$outdir/chr$i/tmp2\" GenotypeGVCFs -R $ref/chr${i}.fa -V $outdir/chr$i/chr${i}.combine.vcf.gz -O $outdir/chr$i/chr${i}.raw.vcf.gz
-		echo \"gatk GenotypeGVCFs Done\"
-		date
-		qstat -j \$JOB_ID|grep usage" > $outdir/chr$i/chr${i}.vcf.sh
-
-	echo "date
-		$gatk --java-options \"-Xmx12G\" SelectVariants -R $ref/chr${i}.fa -V $outdir/chr$i/chr${i}.raw.vcf.gz -select-type SNP  -O $outdir/chr$i/chr${i}.raw.vcf.SNP.gz
-		echo \"gatk SelectVariants:snp Done\"
-	
-		snpFilt=\"QD < 2.0 || ReadPosRankSum < -8.0  || FS > 60.0 ||  MQ < 40.0 || SOR > 3.0 || MQRankSum < -12.5 || QUAL < 30\"
-		$gatk VariantFiltration -R $ref/chr${i}.fa -V $outdir/chr$i/chr${i}.raw.vcf.SNP.gz -filter \"\$snpFilt\"  --filter-name \"Filter\" -O $outdir/chr$i/chr${i}.raw.vcf.SNP.mark.gz
-		echo \"gatk mark Done\"
-		date
-		qstat -j \$JOB_ID|grep usage" >$outdir/chr$i/chr${i}.select.mark.sh
-
-	echo "cd $outdir/chr$i/ && qsub -cwd -l vf=10G,p=4 -P s2pnh chr${i}.combine.sh" >> $outdir/qsub.combine.sh
-	echo "cd $outdir/chr$i/ && qsub -cwd -l vf=8G,p=1 -P s2pnh chr${i}.vcf.sh" >> $outdir/qsub.vcf.sh
-	echo "cd $outdir/chr$i/ && qsub -cwd -l vf=2G,p=1 -P s2pnh chr${i}.select.mark.sh">>$outdir/qsub.select.mark.sh
+		echo "cd $out/$sp/chr$i && qsub -cwd -l vf=4G,p=1 -P s2pnh -q s2pnh.q -binding linear:1 ${sp}.chr${i}_${j}.sh">>$out/$sp/qsub.${sp}.sh
+	    fi 
+   		done
+    done
+    echo "cd $out/$sp && sh qsub.${sp}.sh " >>$out/qsub.each.sh	
 done

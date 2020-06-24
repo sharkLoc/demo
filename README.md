@@ -1,2 +1,2 @@
 # Script
-WGS 
+just for record.
